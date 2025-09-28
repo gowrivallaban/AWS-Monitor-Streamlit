@@ -234,8 +234,22 @@ def get_service_status(events_df):
     return service_status
 
 def display_aws_resources(resources: Dict[str, Dict[str, List[Dict[str, Any]]]], events_df: pd.DataFrame) -> None:
-    """Display AWS resources in a user-friendly format."""
+    """Display AWS resources in a user-friendly format with region filtering."""
     service_status = get_service_status(events_df)
+    
+    # Get all unique regions across all services
+    all_regions = set()
+    for service_regions in resources.values():
+        all_regions.update(service_regions.keys())
+    all_regions = sorted(all_regions)
+    
+    # Add 'All Regions' option and create region selector
+    region_options = ['All Regions'] + all_regions
+    selected_region = st.sidebar.selectbox(
+        '🌍 Select Region',
+        region_options,
+        index=0
+    )
     
     # Create tabs for each service
     services = sorted(resources.keys())
@@ -254,12 +268,21 @@ def display_aws_resources(resources: Dict[str, Dict[str, List[Dict[str, Any]]]],
             status_color = 'green' if status == 'Operating Normally' else 'red'
             st.markdown(f"**Status:** :{status_color}[{status}]")
             
-            # Display service-specific metrics
-            total_resources = sum(len(region_resources) for region_resources in regions.values())
+            # Filter regions based on selection
+            display_regions = regions.items()
+            if selected_region != 'All Regions':
+                display_regions = [(selected_region, regions.get(selected_region, []))]
+            
+            # Calculate total resources for the selected region(s)
+            total_resources = sum(len(region_resources) for _, region_resources in display_regions)
             st.metric(f"Total {service.upper()} Resources", total_resources)
             
-            # Show resources by region
-            for region, region_resources in sorted(regions.items()):
+            if total_resources == 0:
+                st.info(f"No resources found in {selected_region if selected_region != 'All Regions' else 'any region'}")
+                continue
+                
+            # Show resources for the selected region(s)
+            for region, region_resources in sorted(display_regions):
                 if not region_resources:
                     continue
                     
